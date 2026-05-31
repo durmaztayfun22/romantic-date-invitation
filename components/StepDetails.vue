@@ -50,7 +50,10 @@
 </template>
 
 <script setup lang="ts">
+import { useRoute } from 'vue-router';
+
 const emit = defineEmits(['submitted']);
+const route = useRoute();
 const loading = ref(false);
 
 const form = reactive({
@@ -59,7 +62,7 @@ const form = reactive({
   note: ''
 });
 
-// Avoid scheduling dates in the past
+// Bilgisayar saatine göre geçmiş tarihleri kilitler
 const todayString = computed(() => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -67,19 +70,30 @@ const todayString = computed(() => {
 
 const handleSubmit = async () => {
   loading.value = true;
+
+  // URL'deki ?to=... ve ?from=... değerlerini yakalıyoruz
+  // Eğer linkte to parametresi yoksa, varsayılan olarak yine sizin mailinize yedekler.
+  const toEmail = route.query.to || 'durmaztayfun178@gmail.com'; 
+  const fromEmail = route.query.from || '';
+
   try {
     const response = await $fetch('/api/send-email', {
       method: 'POST',
-      body: form
+      body: {
+        ...form,
+        toEmail,
+        fromEmail
+      }
     });
+    
     if (response.success) {
       emit('submitted');
     } else {
-      alert("Something went sideways with the invite. Please check server logs!");
+      alert("Something went wrong with the email transport.");
     }
   } catch (err) {
     console.error(err);
-    alert("Network request down. Make sure server env targets match instructions.");
+    alert("Network error occurred.");
   } finally {
     loading.value = false;
   }
