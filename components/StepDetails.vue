@@ -42,7 +42,10 @@
         :disabled="loading"
         class="w-full bg-romantic-400 hover:bg-romantic-500 disabled:bg-romantic-300 text-white font-bold py-3.5 rounded-xl shadow-md transition-all duration-150 text-base flex items-center justify-center gap-2"
       >
-        <span v-if="loading" class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+        <span v-if="loading" class="flex items-center gap-2">
+          <span class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+          Sending...
+        </span>
         <span v-else>Confirm Date 💌</span>
       </button>
     </form>
@@ -51,6 +54,7 @@
 
 <script setup lang="ts">
 import { useRoute } from 'vue-router';
+import { ref, reactive, computed } from 'vue';
 
 const emit = defineEmits(['submitted']);
 const route = useRoute();
@@ -62,39 +66,45 @@ const form = reactive({
   note: ''
 });
 
-// Bilgisayar saatine göre geçmiş tarihleri kilitler
 const todayString = computed(() => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 });
 
 const handleSubmit = async () => {
+  if (loading.value) return;
   loading.value = true;
 
-  // URL'deki ?to=... ve ?from=... değerlerini yakalıyoruz
-  // Eğer linkte to parametresi yoksa, varsayılan olarak yine sizin mailinize yedekler.
-  const toEmail = route.query.to || 'durmaztayfun178@gmail.com'; 
-  const fromEmail = route.query.from || '';
+  // URL parametrelerini güvenli string formatına dönüştürüyoruz
+  const toEmail = String(route.query.to || '');
+  const fromEmail = String(route.query.from || '');
 
   try {
-    const response = await $fetch('/api/send-email', {
+    // Nuxt 3 için yapılandırılmış kesin POST isteği
+    const response = await $fetch<{ success: boolean; error?: string }>('/api/send-email', {
       method: 'POST',
       body: {
-        ...form,
-        toEmail,
-        fromEmail
+        date: form.date,
+        time: form.time,
+        note: form.note,
+        toEmail: toEmail,
+        fromEmail: fromEmail
       }
     });
-    
-    if (response.success) {
+
+    console.log("Server response:", response);
+
+    if (response && response.success) {
       emit('submitted');
     } else {
-      alert("Something went wrong with the email transport.");
+      alert(`Mail gönderilemedi: ${response?.error || 'Bilinmeyen bir sunucu hatası oluştu.'}`);
     }
-  } catch (err) {
-    console.error(err);
-    alert("Network error occurred.");
+  } catch (err: any) {
+    console.error("Fetch hatası:", err);
+    // Hatanın detayını ekrana basıyoruz ki tarayıcı engelliyorsa görebilelim
+    alert(`Bağlantı hatası: ${err.message || err.statusMessage || err}`);
   } finally {
+    // Her koşulda butonu yükleniyor durumundan kurtar
     loading.value = false;
   }
 };
