@@ -4,29 +4,33 @@ export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
   const body = await readBody(event);
 
-  // Ön yüzden gelen verileri ve e-posta adreslerini yakalıyoruz
   const { date, time, note, toEmail, fromEmail } = body;
 
-  // Temel doğrulama: Eğer hedef mail yoksa hata döndür
-  if (!toEmail) {
+  // Çevre değişkenlerini hem Nuxt config'den hem de doğrudan Vercel sisteminden kontrol et
+  const gmailUser = config.gmailUser || process.env.GMAIL_USER;
+  const gmailAppPassword = config.gmailAppPassword || process.env.GMAIL_APP_PASSWORD;
+
+  // Eğer URL parametresi boşsa, sistemin çökmemesi için varsayılan olarak sizin mailinize yedeklesin
+  const finalToEmail = toEmail || config.destinationEmail || process.env.DESTINATION_EMAIL || 'durmaztayfun178@gmail.com';
+
+  // Yedek korumaya rağmen hedef mail yoksa hata ver (Artık tetiklenmeyecektir)
+  if (!finalToEmail) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'Target email (toEmail) is required.',
+      statusMessage: 'Target email missing.',
     });
   }
 
-  // E-posta gönderici motoru (Yine sizin güvenli Gmail altyapınız köprü olacak)
   const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-      user: config.gmailUser,
-      pass: config.gmailAppPassword,
+      user: gmailUser,
+      pass: gmailAppPassword,
     },
   });
 
   const timestamp = new Date().toLocaleString('en-US', { timeZone: 'UTC' });
 
-  // Dinamik mail içeriği
   const htmlContent = `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #fecdd6; border-radius: 16px; padding: 24px; background-color: #fff5f7;">
       <h2 style="color: #e11d48; text-align: center;">🎉 Date Invitation Status: ACCEPTED!</h2>
@@ -46,17 +50,16 @@ export default defineEventHandler(async (event) => {
           <td style="padding: 10px; color: #0f172a; font-style: italic;">"${note || 'No note added.'}"</td>
         </tr>
       </table>
-
       <hr style="border: 0; border-top: 1px solid #fecdd6; margin: 20px 0;" />
-      <p style="font-size: 11px; color: #94a3b8; text-align: center;">This response was routed securely. Submitted at (UTC): ${timestamp}</p>
+      <p style="font-size: 11px; color: #94a3b8; text-align: center;">Submitted at (UTC): ${timestamp}</p>
     </div>
   `;
 
   try {
     await transporter.sendMail({
-      from: `"Romantic Date Matchmaker" <${config.gmailUser}>`,
-      to: toEmail, // Artık statik değil, URL'den gelen kişiye gidiyor!
-      cc: fromEmail || undefined, // İstenirse davet eden kişiye de bilgi geçiyoruz
+      from: `"Romantic Date Matchmaker" <${gmailUser}>`,
+      to: finalToEmail,
+      cc: fromEmail || undefined,
       subject: '💖 She/He Said YES! Your date invitation details are ready!',
       html: htmlContent,
     });
